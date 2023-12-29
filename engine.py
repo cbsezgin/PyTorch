@@ -1,7 +1,12 @@
 import torch
+import os
 
 from tqdm.auto import tqdm
 from typing import Dict, List, Tuple
+from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
+
+writer = SummaryWriter()
 
 def train_step(model: torch.nn.Module,
                dataloader: torch.utils.data.DataLoader,
@@ -55,13 +60,16 @@ def test_step(model: torch.nn.Module,
     test_acc = test_acc / len(dataloader)
     return test_loss, test_acc
 
+
 def train(model: torch.nn.Module,
           train_dataloader: torch.utils.data.DataLoader,
           test_dataloader: torch.utils.data.DataLoader,
           optimizer: torch.optim.Optimizer,
           loss_fn: torch.nn.Module,
           epochs: int,
-          device: torch.device) -> Dict[str, List]:
+          device: torch.device,
+          model_experiment=False,
+          writer=torch.utils.tensorboard.writer.SummaryWriter) -> Dict[str, List]:
     results = {"train_loss": [],
                "train_acc": [],
                "test_loss": [],
@@ -93,6 +101,30 @@ def train(model: torch.nn.Module,
         results["train_acc"].append(train_acc)
         results["test_loss"].append(test_loss)
         results["test_acc"].append(test_acc)
+        if model_experiment:
+            writer.add_scalars(main_tag="Loss",
+                              tag_scalar_dict={"train_loss":train_loss, "test_loss":test_loss},
+                              global_step=epoch)
+            writer.add_scalars(main_tag="Accuracy",
+                               tag_scalar_dict={"train_acc":train_acc, "test_acc":test_acc},
+                               global_step=epoch)
+            writer.add_graph(model=model,
+                             input_to_model=torch.randn(32,3,224,224).to(device))
+
+    if model_experiment:
+        writer.close()
 
     # Return the filled results at the end of the epochs
     return results
+
+
+def create_writer(experiment_name: str,
+                  model_name: str,
+                  extra: str = None):
+    timestamp = datetime.now().strftime("%Y-%m-%d")
+    if extra:
+        log_dir = os.path.join("runs", timestamp, experiment_name, model_name, extra)
+    else:
+        log_dir = os.path.join("runs", timestamp, experiment_name, model_name)
+
+    return SummaryWriter(log_dir=log_dir)
